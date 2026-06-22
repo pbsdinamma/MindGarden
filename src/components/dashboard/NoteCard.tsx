@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { memo, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Pin, Trash2, RotateCcw, Calendar, Tag, ShieldAlert } from 'lucide-react';
 import { Note } from '@/types/database.types';
@@ -15,46 +15,36 @@ interface NoteCardProps {
   onDelete: (id: string) => void;
 }
 
-export default function NoteCard({
+const NoteCard = memo(function NoteCard({
   note,
   onEdit,
   onTogglePin,
   onTrash,
-  onDelete
+  onDelete,
 }: NoteCardProps) {
   const { theme } = useTheme();
-  
-  // Format dates elegantly
-  const formatDate = (dateStr: string) => {
+
+  const formatDate = useCallback((dateStr: string) => {
     const d = new Date(dateStr);
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-  };
+  }, []);
 
-  // Adaptive Premium Colors
-  // Note.color is expected to be a standard hex code (e.g. #f3f4f6, #fef08a)
-  const getCardStyles = () => {
+  const getCardStyles = useCallback(() => {
     const isDark = document.documentElement.classList.contains('dark');
     const baseColor = note.color || '#f3f4f6';
-    
+
     if (isDark) {
-      // In Dark Mode: use color as an elegant glow border and subtle tint backdrop
-      // Adding '15' (about 8% opacity) to hex code
       const tintColor = baseColor.startsWith('#') ? `${baseColor}15` : 'rgba(255,255,255,0.02)';
       const borderTint = baseColor.startsWith('#') ? `${baseColor}40` : 'rgba(255,255,255,0.1)';
-      
-      return {
-        backgroundColor: tintColor,
-        borderColor: borderTint,
-      };
+      return { backgroundColor: tintColor, borderColor: borderTint };
     } else {
-      // In Light Mode: soft colored cards, or white if neutral slate
       const isNeutral = baseColor === '#f3f4f6' || baseColor === '#ffffff';
       return {
         backgroundColor: isNeutral ? '#ffffff' : baseColor,
         borderColor: isNeutral ? '#e2e8f0' : `${baseColor}cc`,
       };
     }
-  };
+  }, [note.color]);
 
   const cardStyles = getCardStyles();
 
@@ -68,31 +58,40 @@ export default function NoteCard({
       whileHover={{ y: -4, boxShadow: '0 10px 20px rgba(0,0,0,0.15)' }}
       style={cardStyles}
       className={cn(
-        "group relative flex flex-col h-60 rounded-2xl border p-5 cursor-pointer smooth-hover select-none",
-        theme === 'dark' ? "shadow-[0_4px_12px_rgba(0,0,0,0.4)]" : "shadow-sm"
+        'group relative flex flex-col h-60 rounded-2xl border p-5 cursor-pointer smooth-hover select-none',
+        theme === 'dark' ? 'shadow-[0_4px_12px_rgba(0,0,0,0.4)]' : 'shadow-sm',
       )}
       onClick={() => onEdit(note)}
+      tabIndex={0}
+      role="button"
+      aria-label={`Open note: ${note.title || 'Untitled Note'}`}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onEdit(note); } }}
     >
-      {/* Top Banner - Pin & Title */}
+      {/* Pin indicator stripe */}
+      {note.is_pinned && !note.is_trashed && !note.is_deleted && (
+        <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-t-2xl" aria-hidden="true" />
+      )}
+
+      {/* Top row — title & actions */}
       <div className="flex items-start justify-between gap-3 mb-2">
         <h3 className="font-bold text-sm tracking-tight text-text-base line-clamp-1 flex-1 leading-snug group-hover:text-indigo-600 dark:group-hover:text-indigo-400 smooth-hover">
           {note.title || 'Untitled Note'}
         </h3>
-        
-        {/* Actions Menu */}
-        <div 
+
+        {/* Action buttons */}
+        <div
           className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-          onClick={(e) => e.stopPropagation()} // Stop modal from triggering
+          onClick={(e) => e.stopPropagation()}
         >
-          {note.is_trashed ? (
+          {(note.is_trashed || note.is_deleted) ? (
             <>
-              {/* Trash Restoring & Permanent Deletion */}
               <button
                 onClick={() => onTrash(note.id, false)}
                 title="Restore Note"
+                aria-label="Restore note from trash"
                 className="p-1.5 rounded-lg bg-card-bg border border-card-border/50 text-emerald-500 hover:bg-emerald-500/10 active:scale-95 smooth-hover"
               >
-                <RotateCcw className="w-3.5 h-3.5" />
+                <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
               </button>
               <button
                 onClick={() => {
@@ -101,61 +100,65 @@ export default function NoteCard({
                   }
                 }}
                 title="Delete Permanently"
+                aria-label="Delete note permanently"
                 className="p-1.5 rounded-lg bg-card-bg border border-card-border/50 text-rose-500 hover:bg-rose-500/10 active:scale-95 smooth-hover"
               >
-                <Trash2 className="w-3.5 h-3.5" />
+                <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
               </button>
             </>
           ) : (
             <>
-              {/* Standard Pinned & Delete */}
               <button
                 onClick={() => onTogglePin(note.id, !note.is_pinned)}
-                title={note.is_pinned ? "Unpin Note" : "Pin Note"}
+                title={note.is_pinned ? 'Unpin Note' : 'Pin Note'}
+                aria-label={note.is_pinned ? 'Unpin note' : 'Pin note'}
+                aria-pressed={note.is_pinned}
                 className={cn(
-                  "p-1.5 rounded-lg bg-card-bg border border-card-border/50 active:scale-95 smooth-hover",
-                  note.is_pinned 
-                    ? "text-indigo-600 dark:text-indigo-400 bg-indigo-50/50" 
-                    : "text-muted hover:text-text-base"
+                  'p-1.5 rounded-lg bg-card-bg border border-card-border/50 active:scale-95 smooth-hover',
+                  note.is_pinned
+                    ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50/50 dark:bg-indigo-950/20'
+                    : 'text-muted hover:text-text-base',
                 )}
               >
-                <Pin className={cn("w-3.5 h-3.5", note.is_pinned && "fill-indigo-600 dark:fill-indigo-400")} />
+                <Pin className={cn('w-3.5 h-3.5', note.is_pinned && 'fill-indigo-600 dark:fill-indigo-400')} aria-hidden="true" />
               </button>
               <button
                 onClick={() => onTrash(note.id, true)}
                 title="Move to Trash"
+                aria-label="Move note to trash"
                 className="p-1.5 rounded-lg bg-card-bg border border-card-border/50 text-muted hover:text-rose-500 hover:bg-rose-500/5 active:scale-95 smooth-hover"
               >
-                <Trash2 className="w-3.5 h-3.5" />
+                <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
               </button>
             </>
           )}
         </div>
       </div>
 
-      {/* Note Content preview */}
+      {/* Content preview */}
       <div className="flex-1 text-xs text-muted/90 overflow-hidden mb-4 leading-relaxed flex items-center justify-center">
         {note.content && note.content.startsWith('data:image/') ? (
           <div className="w-full h-full relative flex items-center justify-center overflow-hidden rounded-lg border border-card-border/40 bg-white dark:bg-zinc-900/60 p-2">
-            <img 
-              src={note.content} 
-              alt={note.title || 'Sketch'} 
+            <img
+              src={note.content}
+              alt={note.title || 'Sketch'}
               className="max-w-full max-h-full object-contain smooth-hover group-hover:scale-105 transition-transform duration-300"
             />
           </div>
         ) : (
           <p className="line-clamp-6 whitespace-pre-wrap w-full text-left">
-            {note.content || <span className="text-muted/40 italic">Empty note. Open to add ideas...</span>}
+            {note.content_text || note.content || (
+              <span className="text-muted/40 italic">Empty note. Open to add ideas...</span>
+            )}
           </p>
         )}
       </div>
 
-      {/* Footer Tags & Date info */}
+      {/* Footer — tags & date */}
       <div className="mt-auto pt-3 border-t border-card-border/40 flex flex-col gap-2.5">
-        {/* Tags badges */}
         {note.tags && note.tags.length > 0 && (
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
-            <Tag className="w-3 h-3 text-muted shrink-0" />
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5" aria-label="Tags">
+            <Tag className="w-3 h-3 text-muted shrink-0" aria-hidden="true" />
             {note.tags.map((tag) => (
               <span
                 key={tag}
@@ -167,24 +170,28 @@ export default function NoteCard({
           </div>
         )}
 
-        {/* Date Row */}
         <div className="flex items-center justify-between text-[9px] text-muted font-medium">
           <span className="flex items-center gap-1">
-            <Calendar className="w-2.5 h-2.5" />
-            {formatDate(note.updated_at || note.created_at)}
+            <Calendar className="w-2.5 h-2.5" aria-hidden="true" />
+            <time dateTime={note.updated_at || note.created_at}>
+              {formatDate(note.updated_at || note.created_at)}
+            </time>
           </span>
-          {note.is_pinned && !note.is_trashed && (
-            <span className="text-indigo-600 dark:text-indigo-400 font-bold flex items-center gap-0.5 uppercase tracking-wide">
+          {note.is_pinned && !note.is_trashed && !note.is_deleted && (
+            <span className="text-indigo-600 dark:text-indigo-400 font-bold flex items-center gap-0.5 uppercase tracking-wide" aria-label="Pinned">
+              <Pin className="w-2.5 h-2.5 fill-indigo-600 dark:fill-indigo-400" aria-hidden="true" />
               Pinned
             </span>
           )}
-          {note.is_trashed && (
-            <span className="text-rose-500 font-semibold flex items-center gap-0.5">
-              <ShieldAlert className="w-2.5 h-2.5" /> Trashed
+          {(note.is_trashed || note.is_deleted) && (
+            <span className="text-rose-500 font-semibold flex items-center gap-0.5" aria-label="In trash">
+              <ShieldAlert className="w-2.5 h-2.5" aria-hidden="true" /> Trashed
             </span>
           )}
         </div>
       </div>
     </motion.div>
   );
-}
+});
+
+export default NoteCard;
